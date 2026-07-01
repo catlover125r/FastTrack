@@ -46,6 +46,66 @@ function setStatus(msg) {
   statusEl.textContent = msg;
 }
 
+// ---- tooltips ----
+
+const tipEl = $('tooltip');
+const tipText = $('tooltip-text');
+const tipKey = $('tooltip-key');
+let tipTimer = null;
+let tipCurrent = null; // identity of the pending/shown tooltip
+
+function hideTip() {
+  clearTimeout(tipTimer);
+  tipTimer = null;
+  tipCurrent = null;
+  tipEl.classList.add('hidden');
+}
+
+function displayTip(text, key, x, y, below = true) {
+  tipText.textContent = text;
+  tipKey.textContent = key || '';
+  tipKey.style.display = key ? '' : 'none';
+  tipEl.classList.remove('hidden');
+  const w = tipEl.offsetWidth;
+  const h = tipEl.offsetHeight;
+  let left = Math.max(8, Math.min(x - w / 2, window.innerWidth - w - 8));
+  let top = below ? y + 8 : y - h - 8;
+  if (top + h > window.innerHeight - 8) top = y - h - 8;
+  if (top < 8) top = y + 8;
+  tipEl.style.left = `${left}px`;
+  tipEl.style.top = `${top}px`;
+}
+
+function scheduleTip(identity, show) {
+  if (tipCurrent === identity) return;
+  hideTip();
+  tipCurrent = identity;
+  tipTimer = setTimeout(show, 500);
+}
+
+document.addEventListener('mouseover', (e) => {
+  const t = e.target.closest?.('[data-tip]');
+  if (!t) return;
+  scheduleTip(`el:${t.dataset.tip}`, () => {
+    const r = t.getBoundingClientRect();
+    displayTip(t.dataset.tip, t.dataset.key, r.left + r.width / 2, r.bottom);
+  });
+});
+document.addEventListener('mouseout', (e) => {
+  const t = e.target.closest?.('[data-tip]');
+  if (t && !t.contains(e.relatedTarget)) hideTip();
+});
+window.addEventListener('mousedown', hideTip, true);
+
+// tooltips for canvas hit targets (mute buttons, fade handles, …)
+function hoverTip(tip, x, y) {
+  if (!tip) {
+    if (tipCurrent && tipCurrent.startsWith('cv:')) hideTip();
+    return;
+  }
+  scheduleTip(`cv:${tip.text}`, () => displayTip(tip.text, tip.key, x, y + 14));
+}
+
 function onChange() {
   updateSpacer();
   updateLCD();
@@ -245,6 +305,7 @@ const hooks = {
   stop: stopPlayback,
   seek,
   setStatus,
+  hover: hoverTip,
 };
 
 initTimeline(hooks);

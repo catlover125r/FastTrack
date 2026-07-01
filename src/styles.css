@@ -337,6 +337,37 @@ html, body {
   font-family: "SF Mono", Menlo, monospace;
 }
 
+/* ---------- Tooltip ---------- */
+
+#tooltip {
+  position: fixed;
+  z-index: 400;
+  pointer-events: none;
+  background: rgba(22, 22, 22, 0.97);
+  border: 1px solid #3d3d3d;
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: 11px;
+  color: #d6d6d6;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 300px;
+  line-height: 1.35;
+}
+#tooltip .tt-key {
+  background: #383838;
+  border: 1px solid #1e1e1e;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 10px;
+  color: #b9d8a0;
+  font-family: "SF Mono", Menlo, monospace;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* ---------- Toast ---------- */
 
 #toast {

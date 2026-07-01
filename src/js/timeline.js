@@ -287,8 +287,28 @@ function onMouseDown(e) {
 
 function onMouseMove(e) {
   if (!drag) {
+    if (e.target !== canvas) {
+      hooks.hover(null, 0, 0);
+      return;
+    }
     const { mx, my } = canvasPos(e);
-    canvas.style.cursor = cursorFor(hitTest(mx, my), e.altKey);
+    const h = hitTest(mx, my);
+    canvas.style.cursor = cursorFor(h, e.altKey);
+    let tip = null;
+    if (h.type === 'mute') {
+      tip = { text: `${state.trackMuted[h.track] ? 'Unmute' : 'Mute'} Track ${h.track + 1}` };
+    } else if (h.type === 'clip' && h.zone === 'fade-in') {
+      tip = { text: 'Fade in — drag the handle' };
+    } else if (h.type === 'clip' && h.zone === 'fade-out') {
+      tip = { text: 'Fade out — drag the handle' };
+    } else if (h.type === 'clip' && (h.zone === 'l-edge' || h.zone === 'r-edge')) {
+      tip = { text: 'Trim — drag the edge' };
+    } else if (h.type === 'clip' && h.zone === 'body' && state.tool === 'pointer') {
+      tip = { text: h.clip.name, key: '⌥drag duplicates' };
+    } else if (h.type === 'ruler') {
+      tip = { text: 'Playhead — click or drag' };
+    }
+    hooks.hover(tip, e.clientX, e.clientY);
     return;
   }
   const { mx, my } = canvasPos(e);

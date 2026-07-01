@@ -101,7 +101,7 @@ export function initInspector(hooks_) {
     sw.className = 'swatch';
     sw.dataset.color = color;
     sw.style.background = color;
-    sw.title = color === PALETTE[0] ? 'Default' : '';
+    sw.dataset.tip = color === PALETTE[0] ? 'Region color — default green' : 'Region color';
     sw.addEventListener('click', () => {
       const sel = selectedClips();
       if (!sel.length) return;

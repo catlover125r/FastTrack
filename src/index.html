@@ -10,46 +10,46 @@
 
   <div id="toolbar">
     <div class="tb-group" id="tools">
-      <button class="tool-btn active" data-tool="pointer" title="Pointer (A)">
+      <button class="tool-btn active" data-tool="pointer" data-tip="Pointer tool" data-key="A">
         <svg viewBox="0 0 16 16"><path d="M4 1.5 L4 12.5 L7 9.8 L9 14 L11 13 L9 9 L12.5 8.7 Z" fill="currentColor"/></svg>
       </button>
-      <button class="tool-btn" data-tool="scissors" title="Scissors — click a region to split (C)">
+      <button class="tool-btn" data-tool="scissors" data-tip="Scissors — click a region to split it" data-key="C">
         <svg viewBox="0 0 16 16"><circle cx="4" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.2 10.5 L11 1.5 M10.8 10.5 L5 1.5" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
       </button>
-      <button class="tool-btn" data-tool="fade" title="Fade — drag on a region edge (F)">
+      <button class="tool-btn" data-tool="fade" data-tip="Fade tool — drag inside a region" data-key="F">
         <svg viewBox="0 0 16 16"><path d="M2 13 Q8 13 13 2" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M2 13 L2 2" stroke="currentColor" stroke-width="1" opacity="0.5"/></svg>
       </button>
     </div>
 
     <div class="tb-group" id="transport">
-      <button id="btn-rewind" title="Go to beginning (Return)">
+      <button id="btn-rewind" data-tip="Go to beginning" data-key="⏎">
         <svg viewBox="0 0 16 16"><path d="M4 3 L4 13 M12 3 L5.5 8 L12 13 Z" stroke="currentColor" stroke-width="1.6" fill="currentColor"/></svg>
       </button>
-      <button id="btn-play" title="Play/Stop (Space)">
+      <button id="btn-play" data-tip="Play / Stop" data-key="Space">
         <svg id="icon-play" viewBox="0 0 16 16"><path d="M4.5 2.5 L13 8 L4.5 13.5 Z" fill="currentColor"/></svg>
         <svg id="icon-stop" viewBox="0 0 16 16" class="hidden"><rect x="3.5" y="3.5" width="9" height="9" fill="currentColor"/></svg>
       </button>
     </div>
 
-    <div id="lcd"><span id="lcd-time">0:00.000</span></div>
+    <div id="lcd" data-tip="Playhead position"><span id="lcd-time">0:00.000</span></div>
 
     <div class="tb-group">
-      <button id="btn-snap" class="active" title="Snapping on/off (N)">
+      <button id="btn-snap" class="active" data-tip="Snapping — hold ⌘ while dragging to bypass" data-key="N">
         <svg viewBox="0 0 16 16"><path d="M4 2 L4 8 a4 4 0 0 0 8 0 L12 2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M2.8 5 L5.2 5 M10.8 5 L13.2 5" stroke="currentColor" stroke-width="1.4"/></svg>
       </button>
     </div>
 
     <div class="tb-group" id="zoom-group">
-      <button id="btn-zoom-out" title="Zoom out">−</button>
-      <input id="zoom-slider" type="range" min="0" max="100" value="42" />
-      <button id="btn-zoom-in" title="Zoom in">+</button>
+      <button id="btn-zoom-out" data-tip="Zoom out" data-key="⌘−">−</button>
+      <input id="zoom-slider" data-tip="Zoom" type="range" min="0" max="100" value="42" />
+      <button id="btn-zoom-in" data-tip="Zoom in" data-key="⌘+">+</button>
     </div>
 
     <div class="tb-spacer"></div>
     <span id="status"></span>
     <div class="tb-group">
-      <button id="btn-open" class="text-btn" title="Import audio (⌘O)">Import</button>
-      <button id="btn-export" class="text-btn accent" title="Export mixdown as MP3 (⌘E)">Export MP3</button>
+      <button id="btn-open" class="text-btn" data-tip="Import audio files" data-key="⌘O">Import</button>
+      <button id="btn-export" class="text-btn accent" data-tip="Export the mixdown as MP3" data-key="⌘E">Export MP3</button>
     </div>
   </div>
 
@@ -59,44 +59,44 @@
         <p>No region selected</p>
       </div>
       <div id="insp-clip" class="hidden">
-        <input id="insp-name" spellcheck="false" />
+        <input id="insp-name" spellcheck="false" data-tip="Region name — renames the whole selection" />
         <div id="insp-colors"></div>
 
         <div class="insp-row">
           <label>Volume</label>
-          <input id="insp-gain" type="range" min="-30" max="12" step="0.5" value="0" />
+          <input id="insp-gain" data-tip="Region volume" type="range" min="-30" max="12" step="0.5" value="0" />
           <span class="val" id="insp-gain-val">0.0 dB</span>
         </div>
         <div class="insp-row">
           <label>Pitch</label>
-          <input id="insp-pitch" type="range" min="-12" max="12" step="1" value="0" />
+          <input id="insp-pitch" data-tip="Pitch shift in semitones — speed stays the same" type="range" min="-12" max="12" step="1" value="0" />
           <span class="val" id="insp-pitch-val">0 st</span>
         </div>
         <div class="insp-row">
           <label>Speed</label>
-          <input id="insp-speed" type="range" min="-100" max="100" step="1" value="0" />
+          <input id="insp-speed" data-tip="Playback speed — pitch stays the same" type="range" min="-100" max="100" step="1" value="0" />
           <span class="val" id="insp-speed-val">100%</span>
         </div>
         <div class="insp-row">
           <label>Fade In</label>
-          <input id="insp-fadein" type="number" min="0" step="0.1" value="0" />
+          <input id="insp-fadein" data-tip="Fade in length, seconds — or drag the left handle on a region" type="number" min="0" step="0.1" value="0" />
           <span class="val">s</span>
         </div>
         <div class="insp-row">
           <label>Fade Out</label>
-          <input id="insp-fadeout" type="number" min="0" step="0.1" value="0" />
+          <input id="insp-fadeout" data-tip="Fade out length, seconds — or drag the right handle on a region" type="number" min="0" step="0.1" value="0" />
           <span class="val">s</span>
         </div>
 
         <div class="insp-toggles">
-          <button id="insp-reverse" class="toggle-btn">Reverse</button>
-          <button id="insp-normalize" class="toggle-btn">Normalize</button>
+          <button id="insp-reverse" class="toggle-btn" data-tip="Play the region backwards">Reverse</button>
+          <button id="insp-normalize" class="toggle-btn" data-tip="Boost the region to full volume without clipping">Normalize</button>
         </div>
 
         <div class="insp-actions">
-          <button id="insp-split">Split at Playhead <span class="kbd">⌘T</span></button>
-          <button id="insp-dup">Duplicate <span class="kbd">⌘D</span></button>
-          <button id="insp-delete" class="danger">Delete <span class="kbd">⌫</span></button>
+          <button id="insp-split" data-tip="Split selected regions at the playhead" data-key="⌘T">Split at Playhead <span class="kbd">⌘T</span></button>
+          <button id="insp-dup" data-tip="Duplicate the selection" data-key="⌘D / ⌥drag">Duplicate <span class="kbd">⌘D</span></button>
+          <button id="insp-delete" class="danger" data-tip="Delete the selection" data-key="⌫">Delete <span class="kbd">⌫</span></button>
         </div>
       </div>
     </div>
@@ -112,6 +112,7 @@
     <div class="tm-item" data-tool="fade"><span class="tm-num">F</span> Fade</div>
   </div>
 
+  <div id="tooltip" class="hidden"><span id="tooltip-text"></span><span class="tt-key" id="tooltip-key"></span></div>
   <div id="toast" class="hidden"></div>
 
   <script type="module" src="js/app.js"></script>
