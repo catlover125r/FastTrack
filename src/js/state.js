@@ -19,13 +19,25 @@ export const state = {
   clips: [],
   numTracks: 1,
   trackMuted: [],
-  selectedId: null,
+  selectedIds: [],
   playhead: 0,
   playing: false,
   pxPerSec: 100,
   snap: true,
   tool: 'pointer',
 };
+
+export function isSelected(id) {
+  return state.selectedIds.includes(id);
+}
+
+export function setSelection(ids) {
+  state.selectedIds = [...new Set(ids)];
+}
+
+export function selectedClips() {
+  return state.clips.filter((c) => state.selectedIds.includes(c.id));
+}
 
 let nextId = 1;
 
@@ -85,8 +97,10 @@ export function clipColor(c) {
   return c.color || DEFAULT_COLOR;
 }
 
+// the single selected clip, or null when zero or several are selected
 export function selectedClip() {
-  return state.clips.find((c) => c.id === state.selectedId) || null;
+  const sel = selectedClips();
+  return sel.length === 1 ? sel[0] : null;
 }
 
 export function projectEnd() {
@@ -108,7 +122,7 @@ function snapshot() {
     clips: cloneClips(state.clips),
     numTracks: state.numTracks,
     trackMuted: [...state.trackMuted],
-    selectedId: state.selectedId,
+    selectedIds: [...state.selectedIds],
   };
 }
 
@@ -126,7 +140,7 @@ function restore(snap) {
   state.clips = cloneClips(snap.clips);
   state.numTracks = snap.numTracks;
   state.trackMuted = [...snap.trackMuted];
-  state.selectedId = snap.selectedId;
+  state.selectedIds = [...snap.selectedIds];
 }
 
 export function undo() {

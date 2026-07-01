@@ -1,9 +1,11 @@
 // Left inspector: edits the selected clip's name, color, volume, pitch,
 // speed, fades, reverse/normalize, plus split/duplicate/delete actions.
 
-import { state, selectedClip, pushUndo, takeSnapshot, PALETTE, clipDur } from './state.js';
+import {
+  state, selectedClip, selectedClips, pushUndo, takeSnapshot, PALETTE, clipDur,
+} from './state.js';
 import { updateLiveClip, playbackPos } from './audio.js';
-import { splitAtPlayhead, duplicateClip, deleteClip } from './edits.js';
+import { splitAtPlayhead, duplicateSelected, deleteSelected } from './edits.js';
 
 let hooks;
 let els = {};
@@ -32,10 +34,16 @@ function resync() {
 }
 
 export function refreshInspector() {
-  const c = selectedClip();
+  const sel = selectedClips();
+  const c = sel.length === 1 ? sel[0] : null;
   els.empty.classList.toggle('hidden', !!c);
   els.panel.classList.toggle('hidden', !c);
-  if (!c) return;
+  if (!c) {
+    els.empty.querySelector('p').textContent = sel.length > 1
+      ? `${sel.length} regions selected`
+      : 'No region selected';
+    return;
+  }
 
   if (document.activeElement !== els.name) els.name.value = c.name;
   const db = gainToDb(c.gain);
@@ -189,17 +197,16 @@ export function initInspector(hooks_) {
     }
   });
   document.getElementById('insp-dup').addEventListener('click', () => {
-    const c = selectedClip();
-    if (!c) return;
-    duplicateClip(c);
-    hooks.onChange();
-    refreshInspector();
+    if (duplicateSelected()) {
+      hooks.onChange();
+      refreshInspector();
+    }
   });
   document.getElementById('insp-delete').addEventListener('click', () => {
-    const c = selectedClip();
-    if (!c) return;
-    deleteClip(c);
-    hooks.onChange();
-    refreshInspector();
+    if (deleteSelected()) {
+      resync();
+      hooks.onChange();
+      refreshInspector();
+    }
   });
 }

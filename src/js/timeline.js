@@ -4,6 +4,7 @@
 import {
   state, clipDur, clipEnd, clipColor, projectEnd, pushUndo, takeSnapshot,
   trimLeft, setOutDur, srcAvailBefore, srcAvailAfter,
+  isSelected, setSelection, selectedClips,
 } from './state.js';
 import { PEAK_BUCKET, COARSE_FACTOR, playbackPos, setTrackMuteLive, normGainOf } from './audio.js';
 import { splitClip, cloneClipAt, addTrackIfNeeded } from './edits.js';
@@ -11,7 +12,8 @@ import { splitClip, cloneClipAt, addTrackIfNeeded } from './edits.js';
 export const RULER_H = 28;
 export const TRACK_H = 84;
 export const HEADER_W = 140;
-const MIN_PPS = 1;
+const MIN_PPS = 0.1;       // pinch/⌘-scroll can zoom out to ~3h in view
+const SLIDER_MIN_PPS = 1;  // the toolbar slider keeps its tighter range
 const MAX_PPS = 1200;
 const NAME_BAR_H = 14;
 
@@ -50,6 +52,7 @@ let snapGuide = null; // timeline seconds of an engaged event-snap, else null
 
 function snapTimeInfo(t, excludeId = null, bypass = false) {
   if (!state.snap || bypass) return { v: Math.max(0, t), guide: null };
+  const ex = excludeId instanceof Set ? excludeId : new Set(excludeId === null ? [] : [excludeId]);
   const th = 12 / state.pxPerSec;
   let best = null;
   const consider = (v) => {
@@ -59,7 +62,7 @@ function snapTimeInfo(t, excludeId = null, bypass = false) {
   consider(0);
   consider(state.playhead);
   for (const c of state.clips) {
-    if (c.id === excludeId) continue;
+    if (ex.has(c.id)) continue;
     consider(c.start);
     consider(clipEnd(c));
   }
@@ -119,8 +122,8 @@ export function zoomBy(factor, anchorX) {
   setZoom(state.pxPerSec * factor, anchorX ?? viewW / 2);
 }
 
-export const sliderToPps = (v) => MIN_PPS * Math.pow(MAX_PPS / MIN_PPS, v / 100);
-export const ppsToSlider = (pps) => (100 * Math.log(pps / MIN_PPS)) / Math.log(MAX_PPS / MIN_PPS);
+export const sliderToPps = (v) => SLIDER_MIN_PPS * Math.pow(MAX_PPS / SLIDER_MIN_PPS, v / 100);
+export const ppsToSlider = (pps) => Math.max(0, (100 * Math.log(pps / SLIDER_MIN_PPS)) / Math.log(MAX_PPS / SLIDER_MIN_PPS));
 
 // ---- hit testing ----
 
@@ -205,7 +208,17 @@ function onMouseDown(e) {
   }
   if (h.type === 'clip') {
     const c = h.clip;
-    state.selectedId = c.id;
+    if (e.shiftKey && state.tool === 'pointer') {
+      // shift-click toggles membership; no drag starts
+      if (isSelected(c.id)) setSelection(state.selectedIds.filter((id) => id !== c.id));
+      else setSelection([...state.selectedIds, c.id]);
+      hooks.onChange();
+      requestDraw();
+      return;
+    }
+    // clicking an unselected clip selects just it; clicking inside an
+    // existing multi-selection keeps the group (so it can be dragged)
+    if (!isSelected(c.id)) setSelection([c.id]);
     if (state.tool === 'scissors') {
       splitClip(c, snapTime(h.time, null, e.metaKey));
       hooks.onChange();
@@ -217,22 +230,32 @@ function onMouseDown(e) {
       const local = h.time - c.start;
       drag = {
         mode: local < clipDur(c) / 2 ? 'fade-in' : 'fade-out',
-        clip: c, snap: takeSnapshot(), moved: false,
+        clip: c, clips: [c], snap: takeSnapshot(), moved: false,
       };
     } else {
       const modes = { body: 'move', 'l-edge': 'trim-l', 'r-edge': 'trim-r', 'fade-in': 'fade-in', 'fade-out': 'fade-out' };
       const snap = takeSnapshot();
-      let target = c;
+      const prevSelection = [...state.selectedIds];
+      let grabbed = c;
+      let group = h.zone === 'body' ? selectedClips() : [c];
       let duplicated = false;
       if (h.zone === 'body' && e.altKey) {
-        // option-drag duplicates the clip and drags the copy
-        target = cloneClipAt(c);
-        state.selectedId = target.id;
+        // option-drag duplicates the whole selection and drags the copies
+        const clones = group.map(cloneClipAt);
+        grabbed = clones[group.indexOf(c)];
+        setSelection(clones.map((d) => d.id));
+        group = clones;
         duplicated = true;
       }
       drag = {
-        mode: modes[h.zone], clip: target, snap, moved: false,
-        duplicated, origId: c.id, grabDT: h.time - c.start,
+        mode: modes[h.zone],
+        clip: grabbed,
+        clips: group,
+        orig: group.map((cc) => ({ ref: cc, start: cc.start, track: cc.track })),
+        grabOrig: { start: grabbed.start, track: grabbed.track },
+        groupIds: new Set(group.map((cc) => cc.id)),
+        snap, moved: false, duplicated, prevSelection,
+        grabDT: h.time - c.start,
       };
     }
     hooks.onChange();
@@ -240,7 +263,17 @@ function onMouseDown(e) {
     return;
   }
   if (h.type === 'lane') {
-    state.selectedId = null;
+    if (state.tool === 'pointer') {
+      // drag = marquee selection; plain click resolves on mouseup
+      drag = {
+        mode: 'marquee', x0: mx, y0: my, x1: mx, y1: my,
+        base: e.shiftKey ? [...state.selectedIds] : [],
+        shift: e.shiftKey, meta: e.metaKey, time0: h.time, moved: false,
+      };
+      requestDraw();
+      return;
+    }
+    setSelection([]);
     const t = snapTime(h.time, null, e.metaKey);
     if (state.playing) {
       hooks.seek(t);
@@ -268,13 +301,41 @@ function onMouseMove(e) {
     requestDraw();
     return;
   }
+  if (drag.mode === 'marquee') {
+    drag.x1 = mx;
+    drag.y1 = my;
+    if (Math.abs(mx - drag.x0) + Math.abs(my - drag.y0) > 4) drag.moved = true;
+    if (drag.moved) {
+      const tA = xToTime(Math.min(drag.x0, drag.x1));
+      const tB = xToTime(Math.max(drag.x0, drag.x1));
+      const trA = trackAtY(Math.min(drag.y0, drag.y1));
+      const trB = trackAtY(Math.max(drag.y0, drag.y1));
+      const hits = state.clips
+        .filter((cc) => cc.track >= trA && cc.track <= trB && clipEnd(cc) > tA && cc.start < tB)
+        .map((cc) => cc.id);
+      setSelection([...drag.base, ...hits]);
+      hooks.onChange();
+    }
+    requestDraw();
+    return;
+  }
   if (drag.mode === 'move') {
-    const info = snapMoveInfo(time - drag.grabDT, clipDur(c), c.id, e.metaKey);
+    const info = snapMoveInfo(time - drag.grabDT, clipDur(c), drag.groupIds, e.metaKey);
     snapGuide = info.guide;
-    const tr = Math.max(0, Math.min(trackAtY(my), state.numTracks));
-    if (info.v !== c.start || tr !== c.track) drag.moved = true;
-    c.start = info.v;
-    c.track = tr;
+    const trRaw = Math.max(0, Math.min(trackAtY(my), state.numTracks));
+    let dt = info.v - drag.grabOrig.start;
+    let dTr = trRaw - drag.grabOrig.track;
+    // clamp so the whole group stays on the timeline / valid tracks
+    const minStart = Math.min(...drag.orig.map((o) => o.start));
+    if (minStart + dt < 0) dt = -minStart;
+    const minTrack = Math.min(...drag.orig.map((o) => o.track));
+    const maxTrack = Math.max(...drag.orig.map((o) => o.track));
+    dTr = Math.max(-minTrack, Math.min(dTr, state.numTracks - maxTrack));
+    for (const o of drag.orig) {
+      if (o.ref.start !== o.start + dt || o.ref.track !== o.track + dTr) drag.moved = true;
+      o.ref.start = o.start + dt;
+      o.ref.track = o.track + dTr;
+    }
   } else if (drag.mode === 'trim-l') {
     const minT = Math.max(0, c.start - srcAvailBefore(c) / c.params.speed);
     const info = snapTimeInfo(time, c.id, e.metaKey);
@@ -309,13 +370,25 @@ function onMouseUp() {
   if (!drag) return;
   if (drag.mode === 'playhead') {
     if (drag.wasPlaying) hooks.play();
+  } else if (drag.mode === 'marquee') {
+    if (!drag.moved && !drag.shift) {
+      // plain click on empty space: deselect and move the playhead
+      setSelection([]);
+      const t = snapTime(drag.time0, null, drag.meta);
+      if (state.playing) hooks.seek(t);
+      else state.playhead = Math.max(0, t);
+      hooks.onChange();
+    }
   } else if (drag.duplicated && !drag.moved) {
-    // option-click without an actual drag: discard the clone
-    state.clips = state.clips.filter((c) => c.id !== drag.clip.id);
-    state.selectedId = drag.origId;
+    // option-click without an actual drag: discard the clones
+    const ids = new Set(drag.clips.map((c) => c.id));
+    state.clips = state.clips.filter((c) => !ids.has(c.id));
+    setSelection(drag.prevSelection);
     hooks.onChange();
   } else if (drag.moved) {
-    if (drag.mode === 'move') addTrackIfNeeded(drag.clip.track);
+    if (drag.mode === 'move') {
+      addTrackIfNeeded(Math.max(...drag.clips.map((c) => c.track)));
+    }
     pushUndo(drag.snap);
     // edits during playback need a reschedule to be heard
     if (state.playing) hooks.seek(playbackPos());
@@ -347,6 +420,12 @@ function roundRect(x, y, w, h, r) {
 }
 
 function formatRuler(t, step) {
+  if (t >= 3600) {
+    const h = Math.floor(t / 3600);
+    const m = Math.floor((t % 3600) / 60);
+    const s = Math.round(t % 60);
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
   const m = Math.floor(t / 60);
   const s = t - m * 60;
   if (step < 1) return `${m}:${s.toFixed(1).padStart(4, '0')}`;
@@ -354,9 +433,9 @@ function formatRuler(t, step) {
 }
 
 function rulerStep() {
-  const steps = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
+  const steps = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600];
   for (const s of steps) if (s * state.pxPerSec >= 68) return s;
-  return 600;
+  return 3600;
 }
 
 function drawClip(c, pos) {
@@ -367,7 +446,7 @@ function drawClip(c, pos) {
   const y = trackToY(c.track) + 3;
   const h = TRACK_H - 7;
   const color = clipColor(c);
-  const selected = c.id === state.selectedId;
+  const selected = isSelected(c.id);
 
   roundRect(x, y, w, h, 4);
   g.fillStyle = color;
@@ -501,7 +580,7 @@ function draw() {
 
   // ghost "new track" lane while dragging down / dropping
   const ghostTrack =
-    (drag && drag.mode === 'move' && drag.clip.track === state.numTracks) ||
+    (drag && drag.mode === 'move' && drag.clips.some((c) => c.track === state.numTracks)) ||
     (dropIndicator && dropIndicator.track === state.numTracks);
   if (ghostTrack) {
     const y = trackToY(state.numTracks);
@@ -597,6 +676,19 @@ function draw() {
     const y = trackToY(state.numTracks);
     g.fillStyle = '#7a8a6e';
     g.fillText(`Track ${state.numTracks + 1}`, 12, y + 18);
+  }
+
+  // marquee selection box
+  if (drag && drag.mode === 'marquee' && drag.moved) {
+    const rx = Math.min(drag.x0, drag.x1);
+    const ry = Math.max(Math.min(drag.y0, drag.y1), RULER_H);
+    const rw = Math.abs(drag.x1 - drag.x0);
+    const rh = Math.max(drag.y0, drag.y1) - ry;
+    g.fillStyle = 'rgba(163,189,143,0.13)';
+    g.fillRect(rx, ry, rw, rh);
+    g.strokeStyle = 'rgba(163,189,143,0.65)';
+    g.lineWidth = 1;
+    g.strokeRect(rx + 0.5, ry + 0.5, rw - 1, rh - 1);
   }
 
   // snap guide (FCP-style) when a drag locks onto another clip's edge

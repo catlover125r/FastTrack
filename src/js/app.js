@@ -1,13 +1,15 @@
 // App wiring: transport, keyboard, tool menu, import/export, drag & drop.
 
-import { state, selectedClip, pushUndo, undo, redo, makeClip, clipEnd, projectEnd } from './state.js';
+import {
+  state, selectedClip, setSelection, pushUndo, undo, redo, makeClip, clipEnd, projectEnd,
+} from './state.js';
 import * as audio from './audio.js';
 import {
   initTimeline, requestDraw, updateSpacer, setDropIndicator,
   clientPointToTimeTrack, snapTime, zoomBy, setZoom, sliderToPps, ppsToSlider, HEADER_W,
 } from './timeline.js';
 import { initInspector, refreshInspector } from './inspector.js';
-import { splitAtPlayhead, duplicateClip, deleteClip, addTrackIfNeeded } from './edits.js';
+import { splitAtPlayhead, duplicateSelected, deleteSelected, addTrackIfNeeded } from './edits.js';
 
 const $ = (id) => document.getElementById(id);
 const lcd = $('lcd-time');
@@ -130,7 +132,7 @@ async function addClips(files, time, track) {
     t = clipEnd(clip);
     last = clip;
   }
-  state.selectedId = last.id;
+  setSelection([last.id]);
   // first import: zoom to fit if the audio overflows the viewport
   if (wasEmpty) {
     const avail = $('tl-wrap').clientWidth - HEADER_W - 40;
@@ -200,9 +202,7 @@ function hideToolMenu() {
 // ---- edit commands ----
 
 function cmdDelete() {
-  const c = selectedClip();
-  if (!c) return;
-  deleteClip(c);
+  if (!deleteSelected()) return;
   if (state.playing) seek(audio.playbackPos());
   onChange();
 }
@@ -226,11 +226,7 @@ function cmdSplit() {
 }
 
 function cmdDuplicate() {
-  const c = selectedClip();
-  if (c) {
-    duplicateClip(c);
-    onChange();
-  }
+  if (duplicateSelected()) onChange();
 }
 
 function setSnap(on) {
@@ -327,7 +323,13 @@ window.addEventListener('keydown', (e) => {
     case 'a':
     case 'A':
     case '1':
-      if (!e.metaKey && !e.ctrlKey) setTool('pointer');
+      if (e.metaKey || e.ctrlKey) {
+        e.preventDefault();
+        setSelection(state.clips.map((c) => c.id));
+        onChange();
+      } else {
+        setTool('pointer');
+      }
       break;
     case 'c':
     case 'C':
