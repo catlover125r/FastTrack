@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>FastTrack</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="titlebar-drag"></div>
+
+  <div id="toolbar">
+    <div class="tb-group" id="tools">
+      <button class="tool-btn active" data-tool="pointer" title="Pointer (1)">
+        <svg viewBox="0 0 16 16"><path d="M4 1.5 L4 12.5 L7 9.8 L9 14 L11 13 L9 9 L12.5 8.7 Z" fill="currentColor"/></svg>
+      </button>
+      <button class="tool-btn" data-tool="scissors" title="Scissors — click a region to split (2)">
+        <svg viewBox="0 0 16 16"><circle cx="4" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.2 10.5 L11 1.5 M10.8 10.5 L5 1.5" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+      </button>
+      <button class="tool-btn" data-tool="fade" title="Fade — drag on a region edge (3)">
+        <svg viewBox="0 0 16 16"><path d="M2 13 Q8 13 13 2" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M2 13 L2 2" stroke="currentColor" stroke-width="1" opacity="0.5"/></svg>
+      </button>
+    </div>
+
+    <div class="tb-group" id="transport">
+      <button id="btn-rewind" title="Go to beginning (Return)">
+        <svg viewBox="0 0 16 16"><path d="M4 3 L4 13 M12 3 L5.5 8 L12 13 Z" stroke="currentColor" stroke-width="1.6" fill="currentColor"/></svg>
+      </button>
+      <button id="btn-play" title="Play/Stop (Space)">
+        <svg id="icon-play" viewBox="0 0 16 16"><path d="M4.5 2.5 L13 8 L4.5 13.5 Z" fill="currentColor"/></svg>
+        <svg id="icon-stop" viewBox="0 0 16 16" class="hidden"><rect x="3.5" y="3.5" width="9" height="9" fill="currentColor"/></svg>
+      </button>
+    </div>
+
+    <div id="lcd"><span id="lcd-time">0:00.000</span></div>
+
+    <div class="tb-group">
+      <button id="btn-snap" class="active" title="Snapping on/off (N)">
+        <svg viewBox="0 0 16 16"><path d="M4 2 L4 8 a4 4 0 0 0 8 0 L12 2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M2.8 5 L5.2 5 M10.8 5 L13.2 5" stroke="currentColor" stroke-width="1.4"/></svg>
+      </button>
+    </div>
+
+    <div class="tb-group" id="zoom-group">
+      <button id="btn-zoom-out" title="Zoom out">−</button>
+      <input id="zoom-slider" type="range" min="0" max="100" value="42" />
+      <button id="btn-zoom-in" title="Zoom in">+</button>
+    </div>
+
+    <div class="tb-spacer"></div>
+    <span id="status"></span>
+    <div class="tb-group">
+      <button id="btn-open" class="text-btn" title="Import audio (⌘O)">Import</button>
+      <button id="btn-export" class="text-btn accent" title="Export mixdown as MP3 (⌘E)">Export MP3</button>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="inspector">
+      <div id="insp-empty">
+        <p>No region selected</p>
+        <p class="hint">Drop audio files onto the timeline or press ⌘O to import.<br/><br/>
+        Press <b>T</b> for tools, <b>N</b> for snapping, <b>Space</b> to play.</p>
+      </div>
+      <div id="insp-clip" class="hidden">
+        <input id="insp-name" spellcheck="false" />
+        <div id="insp-colors"></div>
+
+        <div class="insp-row">
+          <label>Volume</label>
+          <input id="insp-gain" type="range" min="-40" max="6" step="0.5" value="0" />
+          <span class="val" id="insp-gain-val">0.0 dB</span>
+        </div>
+        <div class="insp-row">
+          <label>Pitch</label>
+          <input id="insp-pitch" type="range" min="-12" max="12" step="1" value="0" />
+          <span class="val" id="insp-pitch-val">0 st</span>
+        </div>
+        <div class="insp-row">
+          <label>Speed</label>
+          <input id="insp-speed" type="range" min="-100" max="100" step="1" value="0" />
+          <span class="val" id="insp-speed-val">100%</span>
+        </div>
+        <div class="insp-row">
+          <label>Fade In</label>
+          <input id="insp-fadein" type="number" min="0" step="0.1" value="0" />
+          <span class="val">s</span>
+        </div>
+        <div class="insp-row">
+          <label>Fade Out</label>
+          <input id="insp-fadeout" type="number" min="0" step="0.1" value="0" />
+          <span class="val">s</span>
+        </div>
+
+        <div class="insp-toggles">
+          <button id="insp-reverse" class="toggle-btn">Reverse</button>
+          <button id="insp-normalize" class="toggle-btn">Normalize</button>
+        </div>
+
+        <div class="insp-actions">
+          <button id="insp-split">Split at Playhead <span class="kbd">⌘T</span></button>
+          <button id="insp-dup">Duplicate <span class="kbd">⌘D</span></button>
+          <button id="insp-delete" class="danger">Delete <span class="kbd">⌫</span></button>
+        </div>
+      </div>
+    </div>
+    <div id="tl-wrap">
+      <canvas id="tl"></canvas>
+      <div id="tl-spacer"></div>
+    </div>
+  </div>
+
+  <div id="toolmenu" class="hidden">
+    <div class="tm-item" data-tool="pointer"><span class="tm-num">1</span> Pointer</div>
+    <div class="tm-item" data-tool="scissors"><span class="tm-num">2</span> Scissors</div>
+    <div class="tm-item" data-tool="fade"><span class="tm-num">3</span> Fade</div>
+  </div>
+
+  <div id="toast" class="hidden"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
