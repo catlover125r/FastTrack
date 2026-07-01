@@ -10,13 +10,13 @@
 
   <div id="toolbar">
     <div class="tb-group" id="tools">
-      <button class="tool-btn active" data-tool="pointer" title="Pointer (1)">
+      <button class="tool-btn active" data-tool="pointer" title="Pointer (A)">
         <svg viewBox="0 0 16 16"><path d="M4 1.5 L4 12.5 L7 9.8 L9 14 L11 13 L9 9 L12.5 8.7 Z" fill="currentColor"/></svg>
       </button>
-      <button class="tool-btn" data-tool="scissors" title="Scissors — click a region to split (2)">
+      <button class="tool-btn" data-tool="scissors" title="Scissors — click a region to split (C)">
         <svg viewBox="0 0 16 16"><circle cx="4" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.2 10.5 L11 1.5 M10.8 10.5 L5 1.5" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
       </button>
-      <button class="tool-btn" data-tool="fade" title="Fade — drag on a region edge (3)">
+      <button class="tool-btn" data-tool="fade" title="Fade — drag on a region edge (F)">
         <svg viewBox="0 0 16 16"><path d="M2 13 Q8 13 13 2" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M2 13 L2 2" stroke="currentColor" stroke-width="1" opacity="0.5"/></svg>
       </button>
     </div>
@@ -58,7 +58,7 @@
       <div id="insp-empty">
         <p>No region selected</p>
         <p class="hint">Drop audio files onto the timeline or press ⌘O to import.<br/><br/>
-        Press <b>T</b> for tools, <b>N</b> for snapping, <b>Space</b> to play.</p>
+        Press <b>T</b> for tools (<b>A</b>/<b>C</b>/<b>F</b>), <b>N</b> for snapping, <b>Space</b> to play.<br/><b>⌥drag</b> duplicates a region, <b>⌘drag</b> bypasses snapping.</p>
       </div>
       <div id="insp-clip" class="hidden">
         <input id="insp-name" spellcheck="false" />
@@ -109,9 +109,9 @@
   </div>
 
   <div id="toolmenu" class="hidden">
-    <div class="tm-item" data-tool="pointer"><span class="tm-num">1</span> Pointer</div>
-    <div class="tm-item" data-tool="scissors"><span class="tm-num">2</span> Scissors</div>
-    <div class="tm-item" data-tool="fade"><span class="tm-num">3</span> Fade</div>
+    <div class="tm-item" data-tool="pointer"><span class="tm-num">A</span> Pointer</div>
+    <div class="tm-item" data-tool="scissors"><span class="tm-num">C</span> Scissors</div>
+    <div class="tm-item" data-tool="fade"><span class="tm-num">F</span> Fade</div>
   </div>
 
   <div id="toast" class="hidden"></div>

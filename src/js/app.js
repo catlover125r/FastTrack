@@ -324,14 +324,20 @@ window.addEventListener('keydown', (e) => {
     case 'N':
       setSnap(!state.snap);
       break;
+    case 'a':
+    case 'A':
     case '1':
-      setTool('pointer');
+      if (!e.metaKey && !e.ctrlKey) setTool('pointer');
       break;
+    case 'c':
+    case 'C':
     case '2':
-      setTool('scissors');
+      if (!e.metaKey && !e.ctrlKey) setTool('scissors');
       break;
+    case 'f':
+    case 'F':
     case '3':
-      setTool('fade');
+      if (!e.metaKey && !e.ctrlKey) setTool('fade');
       break;
     case 'Escape':
       hideToolMenu();

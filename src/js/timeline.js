@@ -6,7 +6,7 @@ import {
   trimLeft, setOutDur, srcAvailBefore, srcAvailAfter,
 } from './state.js';
 import { PEAK_BUCKET, COARSE_FACTOR, playbackPos, setTrackMuteLive, normGainOf } from './audio.js';
-import { splitClip, addTrackIfNeeded } from './edits.js';
+import { splitClip, cloneClipAt, addTrackIfNeeded } from './edits.js';
 
 export const RULER_H = 28;
 export const TRACK_H = 84;
@@ -43,9 +43,14 @@ const xToTime = (x) => (x - HEADER_W + scrollX) / state.pxPerSec;
 const trackToY = (i) => RULER_H + i * TRACK_H - scrollY;
 const trackAtY = (y) => Math.floor((y - RULER_H + scrollY) / TRACK_H);
 
-export function snapTime(t, excludeId = null, bypass = false) {
-  if (!state.snap || bypass) return Math.max(0, t);
-  const th = 8 / state.pxPerSec;
+// Snapping (FCP/Logic hybrid): a strong magnetic pull to clip edges, the
+// playhead and 0 (with a yellow guide line), and otherwise quantization to
+// the ruler's minor ticks so dragging visibly steps. Hold ⌘ to bypass.
+let snapGuide = null; // timeline seconds of an engaged event-snap, else null
+
+function snapTimeInfo(t, excludeId = null, bypass = false) {
+  if (!state.snap || bypass) return { v: Math.max(0, t), guide: null };
+  const th = 12 / state.pxPerSec;
   let best = null;
   const consider = (v) => {
     const d = Math.abs(v - t);
@@ -58,17 +63,27 @@ export function snapTime(t, excludeId = null, bypass = false) {
     consider(c.start);
     consider(clipEnd(c));
   }
-  return best ? best.v : Math.max(0, t);
+  if (best) return { v: best.v, guide: best.v };
+  const minor = rulerStep() / 5;
+  return { v: Math.max(0, Math.round(t / minor) * minor), guide: null };
 }
 
-// Snap either edge of a moving clip, whichever candidate is closer.
-function snapMove(t, dur, excludeId, bypass) {
-  if (!state.snap || bypass) return Math.max(0, t);
-  const a = snapTime(t, excludeId);
-  const b = snapTime(t + dur, excludeId) - dur;
-  const da = Math.abs(a - t);
-  const db = Math.abs(b - t);
-  return Math.max(0, db < da ? b : a);
+export function snapTime(t, excludeId = null, bypass = false) {
+  return snapTimeInfo(t, excludeId, bypass).v;
+}
+
+// Snap either edge of a moving clip, whichever event candidate is closer.
+function snapMoveInfo(t, dur, excludeId, bypass) {
+  if (!state.snap || bypass) return { v: Math.max(0, t), guide: null };
+  const a = snapTimeInfo(t, excludeId);
+  const b = snapTimeInfo(t + dur, excludeId);
+  if (a.guide !== null || b.guide !== null) {
+    const da = a.guide !== null ? Math.abs(a.v - t) : Infinity;
+    const db = b.guide !== null ? Math.abs(b.v - (t + dur)) : Infinity;
+    if (db < da) return { v: Math.max(0, b.v - dur), guide: b.guide };
+    return { v: Math.max(0, a.v), guide: a.guide };
+  }
+  return { v: a.v, guide: null };
 }
 
 export function updateSpacer() {
@@ -149,7 +164,7 @@ function hitTest(mx, my) {
   return { type: 'lane', track, time };
 }
 
-function cursorFor(h) {
+function cursorFor(h, altKey) {
   if (h.type === 'ruler') return 'default';
   if (h.type === 'mute') return 'pointer';
   if (h.type === 'clip') {
@@ -157,7 +172,7 @@ function cursorFor(h) {
     if (state.tool === 'fade') return 'ew-resize';
     if (h.zone === 'l-edge' || h.zone === 'r-edge') return 'col-resize';
     if (h.zone === 'fade-in' || h.zone === 'fade-out') return 'pointer';
-    return 'default';
+    return altKey ? 'copy' : 'default';
   }
   return 'default';
 }
@@ -176,7 +191,7 @@ function onMouseDown(e) {
   if (h.type === 'ruler') {
     const wasPlaying = state.playing;
     if (wasPlaying) hooks.stop();
-    state.playhead = snapTime(h.time, null, e.altKey);
+    state.playhead = snapTime(h.time, null, e.metaKey);
     drag = { mode: 'playhead', wasPlaying };
     hooks.onChange();
     requestDraw();
@@ -192,7 +207,7 @@ function onMouseDown(e) {
     const c = h.clip;
     state.selectedId = c.id;
     if (state.tool === 'scissors') {
-      splitClip(c, snapTime(h.time, null, e.altKey));
+      splitClip(c, snapTime(h.time, null, e.metaKey));
       hooks.onChange();
       updateSpacer();
       requestDraw();
@@ -206,7 +221,19 @@ function onMouseDown(e) {
       };
     } else {
       const modes = { body: 'move', 'l-edge': 'trim-l', 'r-edge': 'trim-r', 'fade-in': 'fade-in', 'fade-out': 'fade-out' };
-      drag = { mode: modes[h.zone], clip: c, snap: takeSnapshot(), moved: false, grabDT: h.time - c.start };
+      const snap = takeSnapshot();
+      let target = c;
+      let duplicated = false;
+      if (h.zone === 'body' && e.altKey) {
+        // option-drag duplicates the clip and drags the copy
+        target = cloneClipAt(c);
+        state.selectedId = target.id;
+        duplicated = true;
+      }
+      drag = {
+        mode: modes[h.zone], clip: target, snap, moved: false,
+        duplicated, origId: c.id, grabDT: h.time - c.start,
+      };
     }
     hooks.onChange();
     requestDraw();
@@ -214,7 +241,7 @@ function onMouseDown(e) {
   }
   if (h.type === 'lane') {
     state.selectedId = null;
-    const t = snapTime(h.time, null, e.altKey);
+    const t = snapTime(h.time, null, e.metaKey);
     if (state.playing) {
       hooks.seek(t);
     } else {
@@ -228,7 +255,7 @@ function onMouseDown(e) {
 function onMouseMove(e) {
   if (!drag) {
     const { mx, my } = canvasPos(e);
-    canvas.style.cursor = cursorFor(hitTest(mx, my));
+    canvas.style.cursor = cursorFor(hitTest(mx, my), e.altKey);
     return;
   }
   const { mx, my } = canvasPos(e);
@@ -236,27 +263,32 @@ function onMouseMove(e) {
   const c = drag.clip;
 
   if (drag.mode === 'playhead') {
-    state.playhead = snapTime(time, null, e.altKey);
+    state.playhead = snapTime(time, null, e.metaKey);
     hooks.onChange();
     requestDraw();
     return;
   }
   if (drag.mode === 'move') {
-    const t = snapMove(time - drag.grabDT, clipDur(c), c.id, e.altKey);
+    const info = snapMoveInfo(time - drag.grabDT, clipDur(c), c.id, e.metaKey);
+    snapGuide = info.guide;
     const tr = Math.max(0, Math.min(trackAtY(my), state.numTracks));
-    if (t !== c.start || tr !== c.track) drag.moved = true;
-    c.start = t;
+    if (info.v !== c.start || tr !== c.track) drag.moved = true;
+    c.start = info.v;
     c.track = tr;
   } else if (drag.mode === 'trim-l') {
     const minT = Math.max(0, c.start - srcAvailBefore(c) / c.params.speed);
-    const t = Math.max(minT, Math.min(snapTime(time, c.id, e.altKey), clipEnd(c) - 0.02));
+    const info = snapTimeInfo(time, c.id, e.metaKey);
+    const t = Math.max(minT, Math.min(info.v, clipEnd(c) - 0.02));
+    snapGuide = t === info.v ? info.guide : null;
     const delta = t - c.start;
     if (delta !== 0) drag.moved = true;
     trimLeft(c, delta);
     c.fadeIn = Math.min(c.fadeIn, clipDur(c));
   } else if (drag.mode === 'trim-r') {
     const maxT = c.start + clipDur(c) + srcAvailAfter(c) / c.params.speed;
-    const t = Math.max(c.start + 0.02, Math.min(snapTime(time, c.id, e.altKey), maxT));
+    const info = snapTimeInfo(time, c.id, e.metaKey);
+    const t = Math.max(c.start + 0.02, Math.min(info.v, maxT));
+    snapGuide = t === info.v ? info.guide : null;
     if (t !== clipEnd(c)) drag.moved = true;
     setOutDur(c, t - c.start);
     c.fadeOut = Math.min(c.fadeOut, clipDur(c));
@@ -277,6 +309,11 @@ function onMouseUp() {
   if (!drag) return;
   if (drag.mode === 'playhead') {
     if (drag.wasPlaying) hooks.play();
+  } else if (drag.duplicated && !drag.moved) {
+    // option-click without an actual drag: discard the clone
+    state.clips = state.clips.filter((c) => c.id !== drag.clip.id);
+    state.selectedId = drag.origId;
+    hooks.onChange();
   } else if (drag.moved) {
     if (drag.mode === 'move') addTrackIfNeeded(drag.clip.track);
     pushUndo(drag.snap);
@@ -284,6 +321,7 @@ function onMouseUp() {
     if (state.playing) hooks.seek(playbackPos());
   }
   drag = null;
+  snapGuide = null;
   updateSpacer();
   requestDraw();
 }
@@ -559,6 +597,17 @@ function draw() {
     const y = trackToY(state.numTracks);
     g.fillStyle = '#7a8a6e';
     g.fillText(`Track ${state.numTracks + 1}`, 12, y + 18);
+  }
+
+  // snap guide (FCP-style) when a drag locks onto another clip's edge
+  if (snapGuide !== null) {
+    const x = Math.round(timeToX(snapGuide));
+    if (x >= HEADER_W) {
+      g.fillStyle = '#f0c343';
+      g.fillRect(x, RULER_H, 1, viewH - RULER_H);
+      g.fillStyle = 'rgba(240,195,67,0.25)';
+      g.fillRect(x - 1, RULER_H, 3, viewH - RULER_H);
+    }
   }
 
   // drop indicator

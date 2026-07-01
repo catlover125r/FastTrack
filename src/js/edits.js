@@ -43,9 +43,9 @@ export function splitAtPlayhead() {
   return false;
 }
 
-export function duplicateClip(clip) {
-  pushUndo();
-  const d = makeClip(clip.name, clip.buffer, clip.peaks, clip.track, clipEnd(clip));
+// Exact copy at the same position; no undo entry — callers handle that.
+export function cloneClipAt(clip) {
+  const d = makeClip(clip.name, clip.buffer, clip.peaks, clip.track, clip.start);
   d.srcStart = clip.srcStart;
   d.srcEnd = clip.srcEnd;
   d.gain = clip.gain;
@@ -54,6 +54,13 @@ export function duplicateClip(clip) {
   d.color = clip.color;
   d.params = { ...clip.params };
   state.clips.push(d);
+  return d;
+}
+
+export function duplicateClip(clip) {
+  pushUndo();
+  const d = cloneClipAt(clip);
+  d.start = clipEnd(clip);
   state.selectedId = d.id;
   return d;
 }
