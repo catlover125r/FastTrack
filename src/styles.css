@@ -199,26 +199,38 @@ html, body {
   color: #b8c8a8;
   font-family: "SF Mono", Menlo, monospace;
 }
+/* Lightroom Classic style: thin track, filled left segment, bar thumb */
 .insp-row input[type="range"] {
   flex: 1;
   min-width: 0;
   -webkit-appearance: none;
   background: transparent;
   height: 20px;
+  --fill: 50%;
 }
 .insp-row input[type="range"]::-webkit-slider-runnable-track {
-  height: 4px;
-  background: #1e1e1e;
-  border-radius: 2px;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+  height: 3px;
+  border-radius: 1.5px;
+  background: linear-gradient(to right,
+    #969696 0, #969696 var(--fill),
+    #191919 var(--fill), #191919 100%);
+  box-shadow: inset 0 1px 1px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.05);
 }
 .insp-row input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 13px; height: 13px;
-  border-radius: 50%;
-  background: linear-gradient(#c8c8c8, #909090);
-  margin-top: -4.5px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  width: 7px;
+  height: 15px;
+  border-radius: 2px;
+  background: linear-gradient(#e2e2e2, #b0b0b0);
+  border: 1px solid #141414;
+  margin-top: -6.5px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.55);
+}
+.insp-row input[type="range"]:hover::-webkit-slider-thumb {
+  background: linear-gradient(#f2f2f2, #c4c4c4);
+}
+.insp-row input[type="range"]:active::-webkit-slider-thumb {
+  background: linear-gradient(#ffffff, #d0d0d0);
 }
 .insp-row input[type="number"] {
   flex: 1;
