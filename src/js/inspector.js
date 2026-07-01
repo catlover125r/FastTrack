@@ -2,7 +2,7 @@
 // speed, fades, reverse/normalize, plus split/duplicate/delete actions.
 
 import { state, selectedClip, pushUndo, takeSnapshot, PALETTE, clipDur } from './state.js';
-import { applyParams } from './audio.js';
+import { updateLiveClip, playbackPos } from './audio.js';
 import { splitAtPlayhead, duplicateClip, deleteClip } from './edits.js';
 
 let hooks;
@@ -25,14 +25,10 @@ function commitGesture() {
   }
 }
 
-function rerender(clip, params) {
-  hooks.setStatus('Rendering…');
-  setTimeout(() => {
-    applyParams(clip, params);
-    hooks.setStatus('');
-    hooks.onChange();
-    refreshInspector();
-  }, 25);
+// Structural param changes (speed/reverse) invalidate what's currently
+// scheduled; a seamless re-seek makes them audible at the same position.
+function resync() {
+  if (state.playing) hooks.seek(playbackPos());
 }
 
 export function refreshInspector() {
@@ -114,34 +110,43 @@ export function initInspector(hooks_) {
     beginGesture();
     c.gain = dbToGain(parseFloat(els.gain.value));
     els.gainVal.textContent = `${parseFloat(els.gain.value).toFixed(1)} dB`;
+    updateLiveClip(c);
     hooks.onChange();
   });
   els.gain.addEventListener('change', commitGesture);
 
-  // pitch / speed: label live, re-render on release
+  // pitch: applied to the playing SoundTouch node in real time
   els.pitch.addEventListener('input', () => {
-    const v = parseInt(els.pitch.value, 10);
-    els.pitchVal.textContent = `${v > 0 ? '+' : ''}${v} st`;
-  });
-  els.pitch.addEventListener('change', () => {
     const c = selectedClip();
     if (!c) return;
     const v = parseInt(els.pitch.value, 10);
-    if (v === c.params.semitones) return;
-    pushUndo();
-    rerender(c, { ...c.params, semitones: v });
+    els.pitchVal.textContent = `${v > 0 ? '+' : ''}${v} st`;
+    beginGesture();
+    c.params.semitones = v;
+    updateLiveClip(c);
+    hooks.onChange();
+  });
+  els.pitch.addEventListener('change', () => {
+    commitGesture();
+    // pitch alone doesn't change timing, but if the clip was playing through
+    // the plain (non-stretch) path it needs a reschedule to pick the node up
+    resync();
   });
 
+  // speed: tempo changes live; timing/fades resync on release
   els.speed.addEventListener('input', () => {
-    els.speedVal.textContent = `${Math.round(sliderToSpeed(parseFloat(els.speed.value)) * 100)}%`;
-  });
-  els.speed.addEventListener('change', () => {
     const c = selectedClip();
     if (!c) return;
     const v = Math.round(sliderToSpeed(parseFloat(els.speed.value)) * 100) / 100;
-    if (v === c.params.speed) return;
-    pushUndo();
-    rerender(c, { ...c.params, speed: v });
+    els.speedVal.textContent = `${Math.round(v * 100)}%`;
+    beginGesture();
+    c.params.speed = v;
+    updateLiveClip(c);
+    hooks.onChange();
+  });
+  els.speed.addEventListener('change', () => {
+    commitGesture();
+    resync();
   });
 
   const fadeHandler = (el, key) => () => {
@@ -153,6 +158,7 @@ export function initInspector(hooks_) {
     c[key] = v;
     hooks.onChange();
     refreshInspector();
+    resync();
   };
   els.fadeIn.addEventListener('change', fadeHandler(els.fadeIn, 'fadeIn'));
   els.fadeOut.addEventListener('change', fadeHandler(els.fadeOut, 'fadeOut'));
@@ -161,13 +167,19 @@ export function initInspector(hooks_) {
     const c = selectedClip();
     if (!c) return;
     pushUndo();
-    rerender(c, { ...c.params, reverse: !c.params.reverse });
+    c.params.reverse = !c.params.reverse;
+    hooks.onChange();
+    refreshInspector();
+    resync();
   });
   els.normalize.addEventListener('click', () => {
     const c = selectedClip();
     if (!c) return;
     pushUndo();
-    rerender(c, { ...c.params, normalize: !c.params.normalize });
+    c.params.normalize = !c.params.normalize;
+    updateLiveClip(c);
+    hooks.onChange();
+    refreshInspector();
   });
 
   document.getElementById('insp-split').addEventListener('click', () => {

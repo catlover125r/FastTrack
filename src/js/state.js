@@ -1,6 +1,6 @@
-// Central mutable state + undo/redo. Clips reference immutable AudioBuffers
-// (original + rendered), so undo snapshots are cheap metadata clones that keep
-// old rendered buffers alive — undoing a pitch/speed change needs no re-render.
+// Central mutable state + undo/redo. Clips reference the immutable original
+// AudioBuffer; pitch/speed/reverse/normalize are pure metadata applied live
+// during playback, so undo snapshots are cheap metadata clones.
 
 export const DEFAULT_COLOR = '#a3bd8f';
 
@@ -29,17 +29,16 @@ export const state = {
 
 let nextId = 1;
 
-export function makeClip(name, buffer, rendered, peaks, track, start) {
+export function makeClip(name, buffer, peaks, track, start) {
   return {
     id: nextId++,
     name,
     buffer,      // original decoded AudioBuffer (immutable)
-    rendered,    // buffer after pitch/speed/reverse/normalize (immutable)
-    peaks,       // Float32Array [min,max,...] per PEAK_BUCKET of rendered
+    peaks,       // { fine, coarse, maxAbs } peak levels of the original buffer
     track,
     start,       // timeline position, seconds
-    srcStart: 0, // trim window into rendered, seconds
-    srcEnd: rendered.duration,
+    srcStart: 0, // trim window in SOURCE seconds (forward orientation)
+    srcEnd: buffer.duration,
     gain: 1,
     fadeIn: 0,
     fadeOut: 0,
@@ -48,8 +47,34 @@ export function makeClip(name, buffer, rendered, peaks, track, start) {
   };
 }
 
+// timeline (output) duration: the source window scaled by speed
 export function clipDur(c) {
-  return c.srcEnd - c.srcStart;
+  return (c.srcEnd - c.srcStart) / c.params.speed;
+}
+
+// Source seconds available beyond the timeline-left / timeline-right edges.
+// With reverse on, the timeline-left edge corresponds to the source END.
+export function srcAvailBefore(c) {
+  return c.params.reverse ? c.buffer.duration - c.srcEnd : c.srcStart;
+}
+
+export function srcAvailAfter(c) {
+  return c.params.reverse ? c.srcStart : c.buffer.duration - c.srcEnd;
+}
+
+// Move the timeline-left edge by dt seconds (positive = rightward).
+export function trimLeft(c, dt) {
+  const s = dt * c.params.speed;
+  if (c.params.reverse) c.srcEnd -= s;
+  else c.srcStart += s;
+  c.start += dt;
+}
+
+// Set the clip's output duration by moving the timeline-right edge.
+export function setOutDur(c, outDur) {
+  const len = outDur * c.params.speed;
+  if (c.params.reverse) c.srcStart = c.srcEnd - len;
+  else c.srcEnd = c.srcStart + len;
 }
 
 export function clipEnd(c) {

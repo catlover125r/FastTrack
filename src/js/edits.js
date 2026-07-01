@@ -7,16 +7,23 @@ export function splitClip(clip, t) {
   if (t <= clip.start + MIN || t >= clipEnd(clip) - MIN) return false;
   pushUndo();
   const left = state.clips.find((c) => c.id === clip.id);
-  const cut = t - left.start;
-  const right = makeClip(left.name, left.buffer, left.rendered, left.peaks, left.track, t);
-  right.srcStart = left.srcStart + cut;
-  right.srcEnd = left.srcEnd;
+  const cutSrc = (t - left.start) * left.params.speed; // source seconds
+  const right = makeClip(left.name, left.buffer, left.peaks, left.track, t);
   right.gain = left.gain;
   right.color = left.color;
   right.params = { ...left.params };
+  if (left.params.reverse) {
+    // timeline-left of a reversed clip corresponds to the source END
+    right.srcStart = left.srcStart;
+    right.srcEnd = left.srcEnd - cutSrc;
+    left.srcStart = left.srcEnd - cutSrc;
+  } else {
+    right.srcStart = left.srcStart + cutSrc;
+    right.srcEnd = left.srcEnd;
+    left.srcEnd = left.srcStart + cutSrc;
+  }
   right.fadeIn = 0;
   right.fadeOut = Math.min(left.fadeOut, clipDur(right));
-  left.srcEnd = left.srcStart + cut;
   left.fadeOut = 0;
   left.fadeIn = Math.min(left.fadeIn, clipDur(left));
   state.clips.splice(state.clips.indexOf(left) + 1, 0, right);
@@ -38,7 +45,7 @@ export function splitAtPlayhead() {
 
 export function duplicateClip(clip) {
   pushUndo();
-  const d = makeClip(clip.name, clip.buffer, clip.rendered, clip.peaks, clip.track, clipEnd(clip));
+  const d = makeClip(clip.name, clip.buffer, clip.peaks, clip.track, clipEnd(clip));
   d.srcStart = clip.srcStart;
   d.srcEnd = clip.srcEnd;
   d.gain = clip.gain;

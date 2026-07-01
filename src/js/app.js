@@ -118,18 +118,25 @@ async function addClips(files, time, track) {
   }
   setStatus('');
   if (!decoded.length) return;
+  const wasEmpty = !state.clips.length;
   pushUndo();
   addTrackIfNeeded(track);
   let t = time;
   let last = null;
   for (const d of decoded) {
     const peaks = audio.computePeaks(d.buffer);
-    const clip = makeClip(d.name.replace(/\.[^.]+$/, ''), d.buffer, d.buffer, peaks, track, t);
+    const clip = makeClip(d.name.replace(/\.[^.]+$/, ''), d.buffer, peaks, track, t);
     state.clips.push(clip);
     t = clipEnd(clip);
     last = clip;
   }
   state.selectedId = last.id;
+  // first import: zoom to fit if the audio overflows the viewport
+  if (wasEmpty) {
+    const avail = $('tl-wrap').clientWidth - HEADER_W - 40;
+    const end = projectEnd();
+    if (end * state.pxPerSec > avail && end > 0) setZoom(avail / end, HEADER_W);
+  }
   onChange();
 }
 
@@ -196,15 +203,22 @@ function cmdDelete() {
   const c = selectedClip();
   if (!c) return;
   deleteClip(c);
+  if (state.playing) seek(audio.playbackPos());
   onChange();
 }
 
 function cmdUndo() {
-  if (undo()) onChange();
+  if (undo()) {
+    if (state.playing) seek(audio.playbackPos());
+    onChange();
+  }
 }
 
 function cmdRedo() {
-  if (redo()) onChange();
+  if (redo()) {
+    if (state.playing) seek(audio.playbackPos());
+    onChange();
+  }
 }
 
 function cmdSplit() {

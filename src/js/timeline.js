@@ -3,14 +3,15 @@
 
 import {
   state, clipDur, clipEnd, clipColor, projectEnd, pushUndo, takeSnapshot,
+  trimLeft, setOutDur, srcAvailBefore, srcAvailAfter,
 } from './state.js';
-import { PEAK_BUCKET, playbackPos, setTrackMuteLive } from './audio.js';
+import { PEAK_BUCKET, COARSE_FACTOR, playbackPos, setTrackMuteLive, normGainOf } from './audio.js';
 import { splitClip, addTrackIfNeeded } from './edits.js';
 
 export const RULER_H = 28;
 export const TRACK_H = 84;
 export const HEADER_W = 140;
-const MIN_PPS = 10;
+const MIN_PPS = 1;
 const MAX_PPS = 1200;
 const NAME_BAR_H = 14;
 
@@ -247,19 +248,17 @@ function onMouseMove(e) {
     c.start = t;
     c.track = tr;
   } else if (drag.mode === 'trim-l') {
-    const minT = Math.max(0, c.start - c.srcStart);
+    const minT = Math.max(0, c.start - srcAvailBefore(c) / c.params.speed);
     const t = Math.max(minT, Math.min(snapTime(time, c.id, e.altKey), clipEnd(c) - 0.02));
     const delta = t - c.start;
     if (delta !== 0) drag.moved = true;
-    c.srcStart += delta;
-    c.start = t;
+    trimLeft(c, delta);
     c.fadeIn = Math.min(c.fadeIn, clipDur(c));
   } else if (drag.mode === 'trim-r') {
-    const maxT = c.start + (c.rendered.duration - c.srcStart);
+    const maxT = c.start + clipDur(c) + srcAvailAfter(c) / c.params.speed;
     const t = Math.max(c.start + 0.02, Math.min(snapTime(time, c.id, e.altKey), maxT));
-    const newEnd = c.srcStart + (t - c.start);
-    if (newEnd !== c.srcEnd) drag.moved = true;
-    c.srcEnd = newEnd;
+    if (t !== clipEnd(c)) drag.moved = true;
+    setOutDur(c, t - c.start);
     c.fadeOut = Math.min(c.fadeOut, clipDur(c));
   } else if (drag.mode === 'fade-in') {
     const v = Math.max(0, Math.min(time - c.start, clipDur(c)));
@@ -281,6 +280,8 @@ function onMouseUp() {
   } else if (drag.moved) {
     if (drag.mode === 'move') addTrackIfNeeded(drag.clip.track);
     pushUndo(drag.snap);
+    // edits during playback need a reschedule to be heard
+    if (state.playing) hooks.seek(playbackPos());
   }
   drag = null;
   updateSpacer();
@@ -350,30 +351,38 @@ function drawClip(c, pos) {
   g.textBaseline = 'middle';
   g.fillText(c.name, x + 5, y + NAME_BAR_H / 2 + 0.5, Math.max(10, w - 10));
 
-  // waveform
+  // waveform — mapped through speed (x-scale), reverse (mirror), normalize (y-scale)
   const top = y + NAME_BAR_H + 2;
   const bottom = y + h - 3;
   const centerY = (top + bottom) / 2;
   const amp = (bottom - top) / 2;
-  const sr = c.rendered.sampleRate;
-  const nBuckets = c.peaks.length / 2;
+  const sr = c.buffer.sampleRate;
+  const rev = c.params.reverse;
+  const k = c.params.normalize ? normGainOf(c) : 1;
+  const srcPerPx = c.params.speed / pps; // source seconds per screen pixel
+  const useCoarse = (srcPerPx * sr) / PEAK_BUCKET > COARSE_FACTOR;
+  const level = useCoarse ? c.peaks.coarse : c.peaks.fine;
+  const bucketSec = (useCoarse ? PEAK_BUCKET * COARSE_FACTOR : PEAK_BUCKET) / sr;
+  const nBuckets = level.length / 2;
   const px0 = Math.max(Math.floor(x), HEADER_W);
   const px1 = Math.min(Math.ceil(x + w), viewW);
   g.fillStyle = waveColor(color);
   g.beginPath();
   for (let px = px0; px < px1; px++) {
-    const tA = c.srcStart + (px - x) / pps;
-    const tB = tA + 1 / pps;
-    let b0 = Math.floor((tA * sr) / PEAK_BUCKET);
-    let b1 = Math.floor((tB * sr) / PEAK_BUCKET);
+    const o = px - x;
+    const tA = rev ? c.srcEnd - (o + 1) * srcPerPx : c.srcStart + o * srcPerPx;
+    let b0 = Math.floor(tA / bucketSec);
+    let b1 = Math.floor((tA + srcPerPx) / bucketSec);
     b0 = Math.max(0, Math.min(b0, nBuckets - 1));
     b1 = Math.max(b0, Math.min(b1, nBuckets - 1));
     let mn = 0;
     let mx = 0;
     for (let b = b0; b <= b1; b++) {
-      if (c.peaks[b * 2] < mn) mn = c.peaks[b * 2];
-      if (c.peaks[b * 2 + 1] > mx) mx = c.peaks[b * 2 + 1];
+      if (level[b * 2] < mn) mn = level[b * 2];
+      if (level[b * 2 + 1] > mx) mx = level[b * 2 + 1];
     }
+    mn = Math.max(-1, mn * k);
+    mx = Math.min(1, mx * k);
     const yTop = centerY - mx * amp;
     const yH = Math.max(1, (mx - mn) * amp);
     g.rect(px, yTop, 1, yH);
